@@ -3,6 +3,8 @@
 ## Description
 
 The **S-protein-typer** application has been developed to provide support to the SARS-Cov2 barcoding typisation pipeline.
+To analyze sequencing data obtained by the S1-ROI primer panel, files for analysis with the ARTIC pipeline are in the here included [archive](https://github.com/MassimoGregorioTotaro/s-protein-typer/blob/main/V1000SG.zip)
+The original repository can be found on [GitLab](https://gitlab.com/MassimoGregorioTotaro/s-protein-typer.git)
 
 ## Visuals
 
@@ -10,7 +12,7 @@ The **S-protein-typer** application has been developed to provide support to the
 
 ## Installation
 
-The tool requires a [conda](https://docs.conda.io/projects/conda/en/latest/index.html) environment set up with the provided [environment file](https://gitlab.com/MassimoGregorioTotaro/s-protein-typer/-/blob/main/s-protein-typer.yaml).
+The tool requires a [conda](https://docs.conda.io/projects/conda/en/latest/index.html) environment set up with the provided [environment file](https://github.com/MassimoGregorioTotaro/s-protein-typer/blob/main/s-protein-typer.yaml).
 It has been tested on MacOS and GNU/Linux systems;
 Windows 10 and above users are able to use it with minimal effort using [WSL](https://docs.microsoft.com/en-gb/windows/wsl/).
 
@@ -35,7 +37,7 @@ More options can be viewed running the program with the --help flag:
 - **--slow** performs a Multiple Sequence Alignment, in case some sequences are particularly weak, it is more accurate, but also slower
 - **--output** exports the alignment as a CSV file, to be quickly analysed again (e.g. with a different classifier) or used for retraining the classifier
 - **--machine_readable** disables the terminal formatting so that the ouput cam be redirected or saved to a file via terminal
-- **--classifi**er in case the classifier is in a different path
+- **--classifier** in case the classifier is in a different path
 - **--alignment** reads a pre-generated CSV file or an alignment FASTA file, instead of the sequences FASTA files, for a quicker classification analysis
 
 ## Support
@@ -56,6 +58,7 @@ Minor adjustments can be made, especially regarding the classifier, according to
 ## Authors and acknowledgment
 
 **Massimo G. Totaro**, Institute of Biochemistry, Graz University of Technology, Graz, Austria.
+
 ## License
 
 [BSD-3-Clause](https://gitlab.com/MassimoGregorioTotaro/s-protein-typer/-/blob/main/)
