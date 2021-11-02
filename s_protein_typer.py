@@ -94,7 +94,7 @@ def silent_print(string: str) -> None:
 
 
 def read_fasta(*files:str, optimise:bool=False) -> List[SeqRecord]:
-    """Read all SeqRecords in the passed fasta files, while processing them."""
+    """Read all SeqRecords in the passed fasta files, while processing them"""
     out = list()
     for f in files:
         silent_print(f"Reading '{f}':")
@@ -109,13 +109,13 @@ def read_fasta(*files:str, optimise:bool=False) -> List[SeqRecord]:
                 elif len(seq) < LEN_MIN:
                     seq.seq = Seq('---')
                     seq.id = '-' + seq.id
-            silent_print(f"\tsequence '{seq.id}' loaded;")
+            silent_print(f"\tsequence '{seq.id}' loaded")
             out.append(seq)
     return out
 
 
 def align_sequences(*record:SeqRecord, reference:Optional[SeqRecord]=None) -> List[SeqRecord]:
-    """Align all the passed SeqRecords sequences."""
+    """Align all the passed SeqRecords sequences"""
     write(record, (handle := StringIO()), "fasta")
     alignments = MuscleCommandline(diags=True)(stdin=handle.getvalue())[0]
     alignment = list(read(StringIO(alignments), "fasta"))
@@ -133,12 +133,12 @@ def align_sequences(*record:SeqRecord, reference:Optional[SeqRecord]=None) -> Li
 
 
 def translate_seq(seq:Seq) -> Seq:
-    """Translate the given sequence returning the longest found AA chain in the current ORF."""
+    """Translate the given sequence returning the longest found AA chain in the current ORF"""
     return sorted((seq + 'NNN'[:-(len(seq) % 3)]).translate().split('*'), key=len, reverse=True)[0].strip('X')
 
 
 def translate_DNA_alignment(DNA_alignment:List[SeqRecord]) -> None:
-    """Translate in-place all Seqs in the SeqRecord List, considering the reference ORF."""
+    """Translate in-place all Seqs in the SeqRecord List, considering the reference ORF"""
     start = DNA_alignment[0].seq.find("ATG")
     for rec in DNA_alignment:
         rec.seq = translate_seq(rec.seq[start:].ungap('-'))
@@ -231,7 +231,7 @@ def delta_convention_enforcer(lst: List[str]) -> List[str]:
 def load_reference(ref_file:List[str]) -> Tuple[SeqRecord, Seq]:
     """Load the reference DNA and AA sequences"""
     if not ref_file:
-        raise FileNotFoundError("ERROR! Can't load reference sequence.")
+        raise FileNotFoundError("ERROR! Can't load reference sequence")
     ref_DNA = read_fasta(ref_file[0])[0]
     ref_AA = translate_seq(ref_DNA.seq)
     return ref_DNA, ref_AA
@@ -242,7 +242,7 @@ def load_classifier(cls_file:List[str], train_file:List[str], ref:Seq) -> Option
     if not cls_file:
         cls = None
     else:
-        silent_print(f"Loading classifier from file '{cls_file[0]}'.")
+        silent_print(f"Loading classifier from file '{cls_file[0]}'")
         with open(cls_file[0], "rb") as f:
             cls = load(f)
                 #   If an hardcoded threshold values is given, override the imported one
@@ -250,7 +250,7 @@ def load_classifier(cls_file:List[str], train_file:List[str], ref:Seq) -> Option
     if train_file:
             #   Check whether the classifier is given, else instantiate a new one before training, then save it
         if not cls:
-            silent_print(f"Initialising new classifier instance.")
+            silent_print(f"Initialising new classifier instance")
             cls = Classifier(cls=RandomForestClassifier(**{'bootstrap'        : True
                                                           ,'max_depth'        : 80
                                                           ,'max_features'     : 'sqrt'
@@ -258,10 +258,10 @@ def load_classifier(cls_file:List[str], train_file:List[str], ref:Seq) -> Option
                                                           ,'min_samples_split': 5
                                                           ,'n_estimators'     : 20
                                                           ,'class_weight'     : 'balanced_subsample'}), ref=ref, threshold=THRESHOLD or 0.8)
-        silent_print(f"Training classifier with data found in file '{train_file[0]}'.")
+        silent_print(f"Training classifier with data found in file '{train_file[0]}'")
         cls.train(cls.readCSV(train_file[0]))
         cls.save((cls_out := f"{''.join(train_file[0].split('.')[:-1])}_classifier.pkl"))
-        silent_print(f"Saving trained classifier as file '{cls_out}'.")
+        silent_print(f"Saving trained classifier as file '{cls_out}'")
     return cls
 
 
@@ -289,41 +289,40 @@ def main() -> None:
                             help="read a pre-existent alignment file, either .fasta or .csv, calculate and print its classification")
     parser.add_argument("-c", "--classifier",       nargs='?',            default="reference/classifier.pkl", metavar="classifier.pkl",\
                             help="relative or absolute path to the classifier binary .pkl file")
+    parser.add_argument("-l", "--slow",             action="store_true",  default=False,
+                            help="perform a more accurate but slower Multiple Sequences Alignment")
     parser.add_argument("-m", "--machine_readable", action="store_true",  default=False,
-                            help="disable terminal formatting to produce a machine readable output")
+                            help="disable terminal formatting to produce a machine readable output; also force the silent flag")
     parser.add_argument("-o", "--output",           nargs='?',            default="",                         metavar="alignment.csv",\
                             help="after calculating the differences between the input sequences, save them to a separate .csv file")
-    parser.add_argument("-s", "--slow",             action="store_true",  default=False,
-                            help="perform a more accurate but slower Multiple Sequences Alignment")
     parser.add_argument("-r", "--reference",        nargs='?',            default="reference/ref_DNA.fasta",  metavar="ref_DNA.fasta",\
                             help="relative or absolute path to the reference .fasta file")
+    parser.add_argument("-s", "--silent",           action="store_false",  default=True,
+                            help="silent mode, suppress descriptive otuput")
     parser.add_argument("-t", "--retrain",          nargs='?',            default="",                         metavar="variants.csv",\
                             help="relative or absolute path to the variants .csv database, to retrain the classifier")
-    parser.add_argument("-v", "--verbose",          action="store_true",  default=False,
-                            help="verbose mode")
     parser.add_argument("sequences",                nargs='*',            default=["data/*.fasta"],
                             help="relative or absolute path to the DNA sequences .fasta files")
     args = parser.parse_args()
         
     global VERBOSE, FORMATTING
-    VERBOSE = args.verbose
+    VERBOSE = args.silent
     if args.machine_readable:
-        silent_print(f"Deactivating terminal output formatting.")
-        FORMATTING = defaultdict(str)
+        VERBOSE, FORMATTING = False, defaultdict(str)
     
     ref_DNA, ref_AA = load_reference(glob(args.reference))
     classifier      = load_classifier(glob(args.classifier), glob(args.retrain), ref_AA)
 
     if not (alignment_file := glob(args.alignment)):
         if not (files := [g for f in args.sequences for g in glob(f)]):
-            raise FileNotFoundError(f"ERROR! No file found for '{' '.join(args.sequences)}'.")
+            raise FileNotFoundError(f"ERROR! No file found for '{' '.join(args.sequences)}'")
         sequences = read_fasta(*files, optimise=True)
             #   If the --slow flag is given, disable the parallelisation pipeline and run a single MSA
         if args.slow:
-            silent_print(f"Performing multiple sequence alignment.")
+            silent_print(f"Performing multiple sequence alignment (slow)")
             diffs, df = pipeline(*sequences, reference=ref_DNA, classifier=classifier)
         else:
-            silent_print(f"Performing parallel sequence alignments.")
+            silent_print(f"Performing parallel sequence alignments (fast)")
             diffss, dfs = zip(*Parallel(n_jobs=-1)(delayed(pipeline)(s, reference=ref_DNA, classifier=classifier) for s in sequences))
             diffs,  df  = '\n'.join(diffss), concat(dfs).fillna('-')
         write_dataframe(args.output, df)
@@ -335,7 +334,7 @@ def main() -> None:
         except ValueError:
             alignment2 = read_csv(input_alignment, index_col=0).T
             alignment2.columns = alignment2.columns.astype("str")
-        silent_print(f"Alignment found in '{input_alignment}'; computing differences.")        
+        silent_print(f"Alignment found in '{input_alignment}'; computing differences")        
         diffs, _ = get_differences(alignment2, classifier)
 
     silent_print(f"\r   \n{FORMATTING['SEQ_C']}{'Sequence ID':^{SEQ_L}}{FORMATTING['OFF']}"\
