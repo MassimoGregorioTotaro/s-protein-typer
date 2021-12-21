@@ -1,19 +1,21 @@
-from argparse                import ArgumentParser
-from Bio.Align.Applications  import MuscleCommandline
-from Bio.AlignIO             import read
-from Bio.Seq                 import Seq
-from Bio.SeqIO               import parse, write
-from Bio.SeqRecord           import SeqRecord
-from collections             import defaultdict
-from dill                    import dump, load
-from io                      import StringIO
-from joblib                  import Parallel, delayed
-from glob                    import glob
-from pandas                  import concat, DataFrame, read_csv, Series
-from re                      import match, search, split
-from sklearn.ensemble        import RandomForestClassifier
+from argparse import ArgumentParser
+from collections import defaultdict
+from functools import reduce
+from glob import glob
+from io import StringIO
+from re import match, search, split
+from typing import List, Optional, Tuple, Union
+
+from Bio.Align.Applications import MuscleCommandline
+from Bio.AlignIO import read
+from Bio.Seq import Seq
+from Bio.SeqIO import parse, write
+from Bio.SeqRecord import SeqRecord
+from dill import dump, load
+from joblib import Parallel, delayed
+from pandas import DataFrame, Series, concat, read_csv
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_validate
-from typing                  import List, Optional, Tuple, Union
 
 THRESHOLD, VERBOSE = None, False
 
@@ -182,8 +184,7 @@ def mutations_string(ref:Series, ser:Series) -> str:
             else:
                 out.append(f"{sv}{ti}{tv}")
         #   Enforce the delta displaying convention
-    out = delta_convention_enforcer(out)
-    return ' '.join((f"{s:<8}" for s in out if s))
+    return ' '.join((f"{s:<8}" for s in naming_conventions_enforcer(out) if s))
 
 
 def get_differences(AA_alignment:Union[List[SeqRecord], DataFrame], classifier:Optional[Classifier]) -> Tuple[str, DataFrame]:
@@ -206,8 +207,8 @@ def get_differences(AA_alignment:Union[List[SeqRecord], DataFrame], classifier:O
                 num = f"{i-i_offset}_{i_length:03}"  
             else:
                 num = f"{i-i_offset}"
-            df[num] = [seq[0]] + ['=' if (s == seq[0]) else s for s in seq[1:]]
-        return df
+            df[num] = [seq[0]] + ['=' if (s == seq[0]) else s for s in seq[1:]]     ## PERFORMANCE BASSA; USARE CONCAT
+        return df.copy()
 
     df = compare_AAs(AA_alignment)
         #   Generate the mutations strings
@@ -219,13 +220,23 @@ def get_differences(AA_alignment:Union[List[SeqRecord], DataFrame], classifier:O
     return '\n'.join(out), df
 
 
-def delta_convention_enforcer(lst: List[str]) -> List[str]:
-    """Resolve a visualisation issue with the delta variant AA alignment"""
-    if "E156G" in lst:
-        i = lst.index("E156G")
-        if lst[i + 1] == "∆157-158" and not match(".159", lst[i + 2]):
-            lst[i:i + 2] = ["∆156-157", "R158G"]
-    return lst
+def naming_conventions_enforcer(lst: List[str]) -> List[str]:
+    """Horrible hack -AHEM- clever workaround to match the calculated alignment to the naming conventions of some variants"""
+    def delta_convention(lsu: List[str]) -> List[str]:
+        """Resolve a visualisation issue with the delta variant AA alignment"""
+        if "E156G" in lsu:
+            i = lsu.index("E156G")
+            if lsu[i + 1] == "∆157-158" and not match(".159", lsu[i + 2]):
+                lsu[i:i + 2] = ["∆156-157", "R158G"]
+        return lsu
+    def omicron_convention(lsu: List[str]) -> List[str]:
+        """Resolve a visualisation issue with the omicron variant AA alignment"""
+        if "G142D" in lsu:
+            i = lsu.index("G142D")
+            if lsu[i + 1] == "∆143-145" and not match(".146", lsu[i + 2]):
+                lsu[i:i + 2] = ["∆142-144", "Y145D"]
+        return lsu
+    return reduce(lambda l, f: tmp[f](l), filter(lambda n: callable(tmp[n]), (tmp := locals())), lst)
 
 
 def load_reference(ref_file:List[str]) -> Tuple[SeqRecord, Seq]:
@@ -250,14 +261,14 @@ def load_classifier(cls_file:List[str], train_file:List[str], ref:Seq) -> Option
     if train_file:
             #   Check whether the classifier is given, else instantiate a new one before training, then save it
         if not cls:
-            silent_print(f"Initialising new classifier instance")
+            silent_print("Initialising new classifier instance")
             cls = Classifier(cls=RandomForestClassifier(**{'bootstrap'        : True
                                                           ,'max_depth'        : 80
                                                           ,'max_features'     : 'sqrt'
                                                           ,'min_samples_leaf' : 2
                                                           ,'min_samples_split': 5
                                                           ,'n_estimators'     : 20
-                                                          ,'class_weight'     : 'balanced_subsample'}), ref=ref, threshold=THRESHOLD or 0.8)
+                                                          ,'class_weight'     : 'balanced_subsample'}), ref=ref, threshold=THRESHOLD or 0.9)
         silent_print(f"Training classifier with data found in file '{train_file[0]}'")
         cls.train(cls.readCSV(train_file[0]))
         cls.save((cls_out := f"{''.join(train_file[0].split('.')[:-1])}_classifier.pkl"))
@@ -319,10 +330,10 @@ def main() -> None:
         sequences = read_fasta(*files, optimise=True)
             #   If the --slow flag is given, disable the parallelisation pipeline and run a single MSA
         if args.slow:
-            silent_print(f"Performing multiple sequence alignment (slow)")
+            silent_print("Performing multiple sequence alignment (slow)")
             diffs, df = pipeline(*sequences, reference=ref_DNA, classifier=classifier)
         else:
-            silent_print(f"Performing parallel sequence alignments (fast)")
+            silent_print("Performing parallel sequence alignments (fast)")
             diffss, dfs = zip(*Parallel(n_jobs=-1)(delayed(pipeline)(s, reference=ref_DNA, classifier=classifier) for s in sequences))
             diffs,  df  = '\n'.join(diffss), concat(dfs).fillna('-')
         write_dataframe(args.output, df)
@@ -334,7 +345,7 @@ def main() -> None:
         except ValueError:
             alignment2 = read_csv(input_alignment, index_col=0).T
             alignment2.columns = alignment2.columns.astype("str")
-        silent_print(f"Alignment found in '{input_alignment}'; computing differences")        
+        silent_print(f"Alignment found in '{input_alignment}'; computing differences")
         diffs, _ = get_differences(alignment2, classifier)
 
     silent_print(f"\r   \n{FORMATTING['SEQ_C']}{'Sequence ID':^{SEQ_L}}{FORMATTING['OFF']}"\
